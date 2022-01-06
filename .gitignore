@@ -1,0 +1,9 @@
+.git/
+venv/
+dlwpt-code/
+data/
+data-unversioned
+.idea
+
+images/
+__pycache__
