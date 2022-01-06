@@ -9,3 +9,4 @@ images/
 __pycache__
 textbook_copy.pdf
 chap_books/
+.vscode

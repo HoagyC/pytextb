@@ -2,6 +2,7 @@ import functools
 import os
 import csv
 import copy
+import random
 
 from collections import namedtuple
 from glob import glob
@@ -41,7 +42,7 @@ def xyz2irc(coord_xyz, origin_xyz, vxSize_xyz, direction_a):
     cri_a = np.round(cri_a).astype(int)[::-1]
     return IrcTuple(*cri_a)
 
-
+# This has basically only one output givne the available data so use lru_cache(1)
 @functools.lru_cache(1)
 def getCandidateInfoList(data_loc="data", requireOnDisk_bool=True):
     mhd_list = glob(f"{data_loc}/subset*/*.mhd")
@@ -157,7 +158,7 @@ class Ct:
 
             ct_chunk = self.hu_a[tuple(slice_list)]
 
-            pad_arr = pad_arr.round().astype(np.int32)
+            pad_arr = pad_arr.round().astype(np.int32)  
 
             ct_chunk = np.pad(ct_chunk, pad_width=pad_arr)
             center_list = [
@@ -173,6 +174,8 @@ class Ct:
         return ct_chunk, center_irc
 
 
+# The way that we go through batches, we go through all of the candidates from a given CT scan at once
+# This means there's lots of value of gets
 @functools.lru_cache(1, typed=True)
 def getCt(series_uid):
     return Ct(series_uid)
@@ -180,16 +183,17 @@ def getCt(series_uid):
 
 raw_cache = getCache("raw")  # Sets the prefix string for the on-disk caching
 
-
+# These raw candidates need to be used repeatedly to train the model
+# It's therefore worth caching each result on disk so we can run subsequent epochs quickly.
 @raw_cache.memoize(typed=True)
 def getCtRawCandidate(series_uid, center_xyz, width_irc):
     ct = getCt(series_uid)
-    ct_chunk, center_irc = Ct(series_uid).getRawCandidate(center_xyz, width_irc)
+    ct_chunk, center_irc = ct.getRawCandidate(center_xyz, width_irc)
     return ct_chunk, center_irc
 
 
 class LunaDataset(Dataset):
-    def __init__(self, val_stride=0, isValSet_bool=None, series_uid=None):
+    def __init__(self, val_stride=0, isValSet_bool=None, series_uid=None, sortby_str='random'):
         super().__init__()
         self.candidateInfo_list = copy.copy(getCandidateInfoList())
 
@@ -207,6 +211,16 @@ class LunaDataset(Dataset):
             # Else, assuming we are making a validation set, delete every val_stride'th
             del self.candidateInfo_list[::val_stride]
             assert self.candidateInfo_list
+       
+        if sortby_str == "random":
+            random.shuffle(self.candidateInfo_list)
+        elif sortby_str == "series_uid":
+            self.candidateInfo_list.sort(key=lambda x: (x.series_uid, x.center_xyz))
+        elif sortby_str == "label_and_size":
+            pass
+        else:
+            raise Exception("Unknown sort: " + repr(sortby_str))
+
 
     def __len__(self):
         return len(self.candidateInfo_list)

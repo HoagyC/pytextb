@@ -23,7 +23,7 @@ def enumerateWithEstimate(
         if current_ndx == start_ndx:
             start_time = time.time()
 
-        elif current_ndx in pow_list and current_ndx > start_ndx:
+        elif (current_ndx in pow_list and current_ndx > start_ndx) or current_ndx == iter_len-  1:
             current_time = time.time()
             elapsed_time = current_time - start_time
             time_per_iter = elapsed_time / (current_ndx - start_ndx)
@@ -32,10 +32,13 @@ def enumerateWithEstimate(
             finish_time = current_time + remaining_time
 
             finish_str = time.strftime(
-                "%a, %d %b %Y %H:%M:%S", time.gmtime(finish_time)
+                "%d %b %Y %H:%M:%S", time.gmtime(finish_time)
+            )
+            current_str = time.strftime(
+                "%d %b %Y %H:%M:%S", time.gmtime(current_time)
             )
             print(
-                "{}. Completed {}/{}. Expected finish at {}".format(
-                    desc_str, current_ndx, iter_len, finish_str
+                "{}. Completed {}/{} at {}. Expected finish at {}".format(
+                    desc_str, current_ndx, iter_len, current_str, finish_str
                 )
             )

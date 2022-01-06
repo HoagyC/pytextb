@@ -244,8 +244,6 @@ class LunaTrainingApp:
         )
 
         for batch_ndx, batch_tup in enumerateWithEstimate(train_dl, "Training"):
-            if batch_ndx % 100 == 0:
-                print("{} / {}".format(batch_ndx, len(train_dl)))
             self.optimizer.zero_grad()
             # note that lots of this complexity isn't really much complexity
             # its just that computeBatchLoss is reused between train and validation functions
@@ -273,7 +271,7 @@ class LunaTrainingApp:
                 device=self.device,
             )
 
-            for batch_ndx, batch_tup in enumerateWithEstimate(val_dl):
+            for batch_ndx, batch_tup in enumerateWithEstimate(val_dl, "Validation"):
                 self.computeBatchLoss(
                     batch_ndx,
                     batch_tup,
