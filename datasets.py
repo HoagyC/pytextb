@@ -43,7 +43,7 @@ def xyz2irc(coord_xyz, origin_xyz, vxSize_xyz, direction_a):
 
 
 @functools.lru_cache(1)
-def getCandidateInfoList(data_loc='data', requireOnDisk_bool=True):
+def getCandidateInfoList(data_loc="data", requireOnDisk_bool=True):
     mhd_list = glob(f"{data_loc}/subset*/*.mhd")
     # [:-4] removes the '.mhd' from the end of the filenames
     presentOnDisk_set = {os.path.split(p)[-1][:-4] for p in mhd_list}
@@ -105,7 +105,7 @@ def getCandidateInfoList(data_loc='data', requireOnDisk_bool=True):
 
 
 class Ct:
-    def __init__(self, series_uid, data_loc):
+    def __init__(self, series_uid, data_loc="data"):
         mhd_path = glob(f"{data_loc}/subset*/{series_uid}.mhd")[0]
 
         ct_mhd = sitk.ReadImage(mhd_path)
@@ -138,7 +138,7 @@ class Ct:
         # tuple of slices acts as is we have them comma separated
 
         ct_chunk = self.hu_a[tuple(slice_list)]
-        
+
         if not list(ct_chunk.shape) == list(width_irc):
             n_dims = 3
             pad_arr = np.zeros((3, 2))
@@ -148,23 +148,25 @@ class Ct:
                     overlap = -slice_list[dim].start
                     pad_arr[dim, 0] = overlap
                     centerChanges_list[dim] -= round(overlap / 2)
-                    slice_list[dim] = slice(0, slic_list[dim].stop)
-                    
+                    slice_list[dim] = slice(0, slice_list[dim].stop)
+
                 if slice_list[dim].stop > self.hu_a.shape[dim]:
                     overlap = slice_list[dim].stop - self.hu_a.shape[dim]
                     pad_arr[dim, 1] = overlap
                     centerChanges_list[dim] += round(overlap / 2)
-            
+
             ct_chunk = self.hu_a[tuple(slice_list)]
-            
+
             pad_arr = pad_arr.round().astype(np.int32)
             print(ct_chunk.shape, width_irc, pad_arr, centerChanges_list)
             print(self.hu_a.shape, ct_chunk, slice_list)
-            
+
             ct_chunk = np.pad(ct_chunk, pad_width=pad_arr)
-            center_list = [center_irc[dim] + centerChanges_list[dim] for dim in range(n_dims)]
+            center_list = [
+                center_irc[dim] + centerChanges_list[dim] for dim in range(n_dims)
+            ]
             center_irc = IrcTuple(*center_list)
-        
+
             assert list(ct_chunk.shape) == list(width_irc)
 
         # needs to also deal here with cases where the center and width put edges
@@ -223,7 +225,9 @@ class LunaDataset(Dataset):
 
         candidate_t = torch.from_numpy(candidate_a)
         candidate_t = candidate_t.to(torch.float32)
-        candidate_t = candidate_t.unsqueeze(0)  # Adding the channel dimension expected for Conv3d
+        candidate_t = candidate_t.unsqueeze(
+            0
+        )  # Adding the channel dimension expected for Conv3d
 
         pos_t = torch.tensor(
             [not candidateInfo_tup.isNodule_bool, candidateInfo_tup.isNodule_bool],
@@ -234,5 +238,7 @@ class LunaDataset(Dataset):
             candidate_t,  # 1((CO10-1))??  This is the input tensor
             pos_t,  # 1((CO10-2))??   This whether it's positive
             candidateInfo_tup.series_uid,  # Series id
-            torch.tensor(center_irc),  # cander of the candidate within the overall CT scan
+            torch.tensor(
+                center_irc
+            ),  # cander of the candidate within the overall CT scan
         )

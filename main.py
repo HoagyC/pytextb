@@ -2,14 +2,17 @@ import argparse
 import datetime
 import logging
 import math
+import operator
 import sys
+
+from functools import reduce
 
 import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from data import LunaDataset
+from datasets import LunaDataset
 
 METRICS_LABEL_NDX = 0
 METRICS_PRED_NDX = 1
@@ -17,6 +20,7 @@ METRICS_LOSS_NDX = 2
 METRICS_SIZE = 3
 
 log = logging.Logger("all")
+
 
 def run(app, *argv):
     argv = list(argv)
@@ -76,7 +80,7 @@ class LunaModel(nn.Module):
 
         in_dims = [32, 48, 48]  # z, x, y
         out_dims = [a / 16 for a in in_dims]
-        linear_outputs = math.prod(out_dims) * conv_channels * 8
+        linear_outputs = reduce(operator.mul, out_dims, 1) * conv_channels * 8
         self.head_linear = nn.Linear(int(linear_outputs), 2)
         self.head_softmax = nn.Softmax(dim=1)
 
@@ -107,7 +111,7 @@ class LunaModel(nn.Module):
             block_output.size(0),
             -1,
         )
-        
+
         linear_output = self.head_linear(conv_flat)
         return linear_output, self.head_softmax(linear_output)
 
@@ -127,9 +131,7 @@ class LunaTrainingApp:
             type=int,
         )
         parser.add_argument(
-            "--data-loc",
-            help="Location of the raw CT scans",
-            default='data'
+            "--data-loc", help="Location of the raw CT scans", default="data"
         )
         parser.add_argument(
             "--batch-size",
@@ -240,16 +242,9 @@ class LunaTrainingApp:
             device=self.device,
         )
 
-        # enumWE provides estimated time of completion, nice to have!
-        # batch_iter = enumerateWithEstimate(
-        #     train_dl,
-        #     "E{} Training".format(epoch_ndx),
-        #     start_ndx=train_dl.num_workers,
-        # )
-        
-        for batch_ndx, batch_tup in enumerate(train_dl):
+        for batch_ndx, batch_tup in enumerateWithEstimate(train_dl, "Training"):
             if batch_ndx % 100 == 0:
-                print('{} / {}'.format(batch_ndx, len(train_dl)))
+                print("{} / {}".format(batch_ndx, len(train_dl)))
             self.optimizer.zero_grad()
             # note that lots of this complexity isn't really much complexity
             # its just that computeBatchLoss is reused between train and validation functions
@@ -277,13 +272,7 @@ class LunaTrainingApp:
                 device=self.device,
             )
 
-            # batch_iter = enumerateWithEstimate(
-            #     val_dl,
-            #     "Validation",
-            #     start_ndx=val_dl.num_workers,
-            # )
-
-            for batch_ndx, batch_tup in enumerate(val_dl):
+            for batch_ndx, batch_tup in enumerateWithEstimate(val_dl):
                 self.computeBatchLoss(
                     batch_ndx,
                     batch_tup,
