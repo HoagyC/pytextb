@@ -20,8 +20,17 @@ METRICS_PRED_NDX = 1
 METRICS_LOSS_NDX = 2
 METRICS_SIZE = 3
 
-log = logging.Logger("all")
+log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
+logfmt_str = "%(asctime)s %(levelname)-8s pid:%(process)d %(name)s:%(lineno)03d:%(funcName)s %(message)s"
+formatter = logging.Formatter(logfmt_str)
+
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+stream_handler.setLevel(logging.DEBUG)
+
+log.addHandler(stream_handler)
 
 def run(app, *argv):
     argv = list(argv)
@@ -164,6 +173,8 @@ class LunaTrainingApp:
 
         self.model = self.initModel()
         self.optimizer = self.initOptimizer()
+        
+        self.totalTrainingSamples_count = 0
 
     def initOptimizer(self):
         return torch.optim.SGD(self.model.parameters(), lr=1e-3, momentum=0.9)
@@ -262,7 +273,7 @@ class LunaTrainingApp:
         return trnMetrics_g.to("cpu")
 
     def doValidation(self, val_dl):
-        with torch.no_grad:
+        with torch.no_grad():
             self.model.eval()
 
             valMetrics_g = torch.zeros(
@@ -306,10 +317,10 @@ class LunaTrainingApp:
         metrics_dict["loss/pos"] = metrics_t[METRICS_LOSS_NDX, posLabel_mask].mean()
 
         metrics_dict["correct/all"] = (
-            (pos_correct + neg_correct) / np.float(metrics_t.shape[1]) * 100
+            (pos_correct + neg_correct) / float(metrics_t.shape[1]) * 100
         )
-        metrics_dict["correct/neg"] = (neg_correct / np.float32(neg_count)) * 100
-        metrics_dict["correct/pos"] = (pos_correct / np.float32(pos_count)) * 100
+        metrics_dict["correct/neg"] = (neg_correct / max(1e-5, float(neg_count))) * 100
+        metrics_dict["correct/pos"] = (pos_correct / max(1e-5, float(pos_count))) * 100
 
         log.info(
             (
@@ -320,25 +331,25 @@ class LunaTrainingApp:
         log.info(
             (
                 "E{} {:8} {loss/neg:.4f} loss, "
-                + "{correct/neg:-5.1f}% correct ({neg_correct:} of {neg_count:}"
+                + "{correct/neg:-5.1f}% correct ({neg_correct:} of {neg_count:})"
+            ).format(
+                epoch_ndx,
+                mode_str,
+                neg_correct=neg_correct,
+                neg_count=neg_count,
+                **metrics_dict,
             )
-        ).format(
-            epoch_ndx,
-            mode_str,
-            neg_correct=neg_correct,
-            neg_count=neg_count,
-            **metrics_dict,
         )
         log.info(
             (
                 "E{} {:8} {loss/pos:.4f} loss, "
-                + "{correct/pos:-5.1f}% correct ({pos_correct:} of {pos_count}"
-            ).format(
-                epoch_ndx,
-                mode_str,
-                pos_correct=pos_correct,
-                pos_count=pos_count,
-                **metrics_dict,
+                + "{correct/pos:-5.1f}% correct ({pos_correct:} of {pos_count})"
+                ).format(
+                    epoch_ndx,
+                    mode_str,
+                    pos_correct=pos_correct,
+                    pos_count=pos_count,
+                    **metrics_dict,
             )
         )
 
@@ -351,6 +362,9 @@ class LunaTrainingApp:
         for epoch_ndx in range(1, self.cli_args.epochs + 1):
             trnMetrics_t = self.doTraining(epoch_ndx, train_dl)
             self.logMetrics(epoch_ndx, "trn", trnMetrics_t)
+            
+            valMetrics_t = self.doValidation(val_dl)
+            self.logMetrics(epoch_ndx, "val", valMetrics_t)
 
 
 if __name__ == "__main__":

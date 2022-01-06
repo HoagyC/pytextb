@@ -26,6 +26,8 @@ class LunaPrepCacheApp:
             sys_argv = sys.argv[1:]
 
         parser = argparse.ArgumentParser()
+        
+        # I think batch size can be larger because we're just loading it in, we don't need to do big matrix work?
         parser.add_argument(
             "--batch-size",
             help="Batch size to use for training",
@@ -44,6 +46,7 @@ class LunaPrepCacheApp:
     def main(self):
         log.info("Starting {}, {}".format(type(self).__name__, self.cli_args))
 
+        # Sorting by series_uid to make sure that we have each Ct in the cache when we're getting different subsections of it
         self.prep_dl = DataLoader(
             LunaDataset(
                 sortby_str="series_uid",
