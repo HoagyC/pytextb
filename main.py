@@ -13,6 +13,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from datasets import LunaDataset
+from utils import enumerateWithEstimate
 
 METRICS_LABEL_NDX = 0
 METRICS_PRED_NDX = 1
