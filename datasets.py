@@ -43,7 +43,7 @@ def xyz2irc(coord_xyz, origin_xyz, vxSize_xyz, direction_a):
 
 
 @functools.lru_cache(1)
-def getCandidateInfoList(data_loc, requireOnDisk_bool=True):
+def getCandidateInfoList(data_loc='data', requireOnDisk_bool=True):
     mhd_list = glob(f"{data_loc}/subset*/*.mhd")
     # [:-4] removes the '.mhd' from the end of the filenames
     presentOnDisk_set = {os.path.split(p)[-1][:-4] for p in mhd_list}
