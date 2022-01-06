@@ -158,8 +158,6 @@ class Ct:
             ct_chunk = self.hu_a[tuple(slice_list)]
 
             pad_arr = pad_arr.round().astype(np.int32)
-            print(ct_chunk.shape, width_irc, pad_arr, centerChanges_list)
-            print(self.hu_a.shape, ct_chunk, slice_list)
 
             ct_chunk = np.pad(ct_chunk, pad_width=pad_arr)
             center_list = [
