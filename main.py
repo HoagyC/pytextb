@@ -195,7 +195,11 @@ class LunaTrainingApp:
             )
 
     def initTrainDl(self):
-        train_ds = LunaDataset(val_stride=10, isValSet_bool=False)
+        train_ds = LunaDataset(
+            val_stride=10,
+            isValSet_bool=False,
+            data_loc=self.cli_args.data_loc
+            )
 
         batch_size = self.cli_args.batch_size
         if self.use_cuda:
@@ -214,6 +218,7 @@ class LunaTrainingApp:
         val_ds = LunaDataset(
             val_stride=10,
             isValSet_bool=True,
+            data_loc=self.cli_args.data_loc
         )
 
         batch_size = self.cli_args.batch_size
