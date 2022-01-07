@@ -46,7 +46,6 @@ def xyz2irc(coord_xyz, origin_xyz, vxSize_xyz, direction_a):
 # This has basically only one output givne the available data so use lru_cache(1)
 @functools.lru_cache(1)
 def getCandidateInfoList(data_loc="data", requireOnDisk_bool=True):
-    print(data_loc)
     mhd_list = glob(f"{data_loc}/subset*/*.mhd")
     # [:-4] removes the '.mhd' from the end of the filenames
     presentOnDisk_set = {os.path.split(p)[-1][:-4] for p in mhd_list}
