@@ -10,3 +10,5 @@ __pycache__
 textbook_copy.pdf
 chap_books/
 .vscode
+runs/
+logger.log

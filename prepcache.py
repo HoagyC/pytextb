@@ -22,11 +22,13 @@ log.setLevel(logging.INFO)
 class LunaPrepCacheApp:
     @classmethod
     def __init__(self, sys_argv=None):
-        if sys_argv is None: # Option to replace command line arguments with python args
+        if (
+            sys_argv is None
+        ):  # Option to replace command line arguments with python args
             sys_argv = sys.argv[1:]
 
         parser = argparse.ArgumentParser()
-        
+
         # I think batch size can be larger because we're just loading it in, we don't need to do big matrix work?
         parser.add_argument(
             "--batch-size",

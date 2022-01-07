@@ -39,7 +39,7 @@ class GzipDisk(Disk):
             gz_file = gzip.GzipFile(mode="wb", compresslevel=1, fileobj=str_io)
 
             for offset in range(0, len(value), 2 ** 30):
-                gz_file.write(value[offset : offset + 2 ** 30])
+                gz_file.write(value[offset:offset + 2 ** 30])
             gz_file.close()
 
             value = str_io.getvalue()

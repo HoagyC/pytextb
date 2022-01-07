@@ -42,6 +42,7 @@ def xyz2irc(coord_xyz, origin_xyz, vxSize_xyz, direction_a):
     cri_a = np.round(cri_a).astype(int)[::-1]
     return IrcTuple(*cri_a)
 
+
 # This has basically only one output givne the available data so use lru_cache(1)
 @functools.lru_cache(1)
 def getCandidateInfoList(data_loc="data", requireOnDisk_bool=True):
@@ -158,7 +159,7 @@ class Ct:
 
             ct_chunk = self.hu_a[tuple(slice_list)]
 
-            pad_arr = pad_arr.round().astype(np.int32)  
+            pad_arr = pad_arr.round().astype(np.int32)
 
             ct_chunk = np.pad(ct_chunk, pad_width=pad_arr)
             center_list = [
@@ -193,7 +194,9 @@ def getCtRawCandidate(series_uid, center_xyz, width_irc):
 
 
 class LunaDataset(Dataset):
-    def __init__(self, val_stride=0, isValSet_bool=None, series_uid=None, sortby_str='random'):
+    def __init__(
+        self, val_stride=0, isValSet_bool=None, series_uid=None, sortby_str="random"
+    ):
         super().__init__()
         self.candidateInfo_list = copy.copy(getCandidateInfoList())
 
@@ -211,7 +214,7 @@ class LunaDataset(Dataset):
             # Else, assuming we are making a validation set, delete every val_stride'th
             del self.candidateInfo_list[::val_stride]
             assert self.candidateInfo_list
-       
+
         if sortby_str == "random":
             random.shuffle(self.candidateInfo_list)
         elif sortby_str == "series_uid":
@@ -221,9 +224,9 @@ class LunaDataset(Dataset):
         else:
             raise Exception("Unknown sort: " + repr(sortby_str))
 
-
     def __len__(self):
-        return len(self.candidateInfo_list)
+        return 500
+        # return len(self.candidateInfo_list)
 
     def __getitem__(self, ndx):
         candidateInfo_tup = self.candidateInfo_list[ndx]

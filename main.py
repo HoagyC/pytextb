@@ -1,8 +1,8 @@
 import argparse
 import datetime
-import logging
 import math
 import operator
+import os
 import sys
 
 from functools import reduce
@@ -11,9 +11,11 @@ import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from datasets import LunaDataset
 from utils import enumerateWithEstimate
+from logconf import logging
 
 METRICS_LABEL_NDX = 0
 METRICS_PRED_NDX = 1
@@ -23,14 +25,6 @@ METRICS_SIZE = 3
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-logfmt_str = "%(asctime)s %(levelname)-8s pid:%(process)d %(name)s:%(lineno)03d:%(funcName)s %(message)s"
-formatter = logging.Formatter(logfmt_str)
-
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(formatter)
-stream_handler.setLevel(logging.DEBUG)
-
-log.addHandler(stream_handler)
 
 def run(app, *argv):
     argv = list(argv)
@@ -173,7 +167,8 @@ class LunaTrainingApp:
 
         self.model = self.initModel()
         self.optimizer = self.initOptimizer()
-        
+
+        self.trn_writer = self.val_writer = None
         self.totalTrainingSamples_count = 0
 
     def initOptimizer(self):
@@ -187,6 +182,17 @@ class LunaTrainingApp:
                 model = nn.DataParallel(model)
             model = model.to(self.device)
         return model
+
+    def initTensorboardWriters(self):
+        if self.trn_writer is None:
+            log_dir = os.path.join("runs", self.cli_args.tb_prefix, self.time_str)
+
+            self.trn_writer = SummaryWriter(
+                log_dir=log_dir + "-trn_cls-" + self.cli_args.comment
+            )
+            self.val_writer = SummaryWriter(
+                log_dir=log_dir + "-val_cls-" + self.cli_args.comment
+            )
 
     def initTrainDl(self):
         train_ds = LunaDataset(val_stride=10, isValSet_bool=False)
@@ -299,6 +305,10 @@ class LunaTrainingApp:
         metrics_t,
         classificationThreshold=0.5,
     ):
+        self.initTensorboardWriters()
+
+        log.info("E{} {}".format(epoch_ndx, type(self).__name__))
+
         negLabel_mask = metrics_t[METRICS_LABEL_NDX] <= classificationThreshold
         negPred_mask = metrics_t[METRICS_PRED_NDX] <= classificationThreshold
 
@@ -344,14 +354,19 @@ class LunaTrainingApp:
             (
                 "E{} {:8} {loss/pos:.4f} loss, "
                 + "{correct/pos:-5.1f}% correct ({pos_correct:} of {pos_count})"
-                ).format(
-                    epoch_ndx,
-                    mode_str,
-                    pos_correct=pos_correct,
-                    pos_count=pos_count,
-                    **metrics_dict,
+            ).format(
+                epoch_ndx,
+                mode_str,
+                pos_correct=pos_correct,
+                pos_count=pos_count,
+                **metrics_dict,
             )
         )
+
+        writer = getattr(self, mode_str + "_writer")
+
+        for key, value in metrics_dict.items():
+            writer.add_scalar(key, value, self.totalTrainingSamples_count)
 
     def main(self):
         train_dl = self.initTrainDl()
@@ -362,10 +377,11 @@ class LunaTrainingApp:
         for epoch_ndx in range(1, self.cli_args.epochs + 1):
             trnMetrics_t = self.doTraining(epoch_ndx, train_dl)
             self.logMetrics(epoch_ndx, "trn", trnMetrics_t)
-            
+
             valMetrics_t = self.doValidation(val_dl)
             self.logMetrics(epoch_ndx, "val", valMetrics_t)
 
 
 if __name__ == "__main__":
+    log.info("starting up")
     LunaTrainingApp().main()
