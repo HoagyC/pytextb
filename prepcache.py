@@ -39,8 +39,14 @@ class LunaPrepCacheApp:
         parser.add_argument(
             "--num-workers",
             help="Number of worker processes for background data loading",
-            default=8,
+            default=2,
             type=int,
+        )
+        parser.add_argument(
+            "--data-loc",
+            help="Location of the Ct scan data",
+            default="data",
+            type=str,
         )
 
         self.cli_args = parser.parse_args(sys_argv)
@@ -48,7 +54,8 @@ class LunaPrepCacheApp:
     def main(self):
         log.info("Starting {}, {}".format(type(self).__name__, self.cli_args))
 
-        # Sorting by series_uid to make sure that we have each Ct in the cache when we're getting different subsections of it
+        # Sorting by series_uid to make sure that we have each Ct in the cache
+        # when we're getting different subsections of it
         self.prep_dl = DataLoader(
             LunaDataset(
                 sortby_str="series_uid",

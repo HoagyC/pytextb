@@ -178,8 +178,8 @@ class Ct:
 # The way that we go through batches, we go through all of the candidates from a given CT scan at once
 # This means there's lots of value of gets
 @functools.lru_cache(1, typed=True)
-def getCt(series_uid):
-    return Ct(series_uid)
+def getCt(series_uid, data_loc="data"):
+    return Ct(series_uid, data_loc=data_loc)
 
 
 raw_cache = getCache("raw")  # Sets the prefix string for the on-disk caching
@@ -187,18 +187,18 @@ raw_cache = getCache("raw")  # Sets the prefix string for the on-disk caching
 # These raw candidates need to be used repeatedly to train the model
 # It's therefore worth caching each result on disk so we can run subsequent epochs quickly.
 @raw_cache.memoize(typed=True)
-def getCtRawCandidate(series_uid, center_xyz, width_irc):
-    ct = getCt(series_uid)
+def getCtRawCandidate(series_uid, center_xyz, width_irc, data_loc="data"):
+    ct = getCt(series_uid, data_loc=data_loc)
     ct_chunk, center_irc = ct.getRawCandidate(center_xyz, width_irc)
     return ct_chunk, center_irc
 
 
 class LunaDataset(Dataset):
     def __init__(
-        self, val_stride=0, isValSet_bool=None, series_uid=None, sortby_str="random"
+        self, val_stride=0, isValSet_bool=None, series_uid=None, sortby_str="random", data_loc="data"
     ):
         super().__init__()
-        self.candidateInfo_list = copy.copy(getCandidateInfoList())
+        self.candidateInfo_list = copy.copy(getCandidateInfoList(data_loc=data_loc))
 
         if series_uid:
             self.candidateInfo_list = [
@@ -225,8 +225,7 @@ class LunaDataset(Dataset):
             raise Exception("Unknown sort: " + repr(sortby_str))
 
     def __len__(self):
-        return 500
-        # return len(self.candidateInfo_list)
+        return len(self.candidateInfo_list)
 
     def __getitem__(self, ndx):
         candidateInfo_tup = self.candidateInfo_list[ndx]

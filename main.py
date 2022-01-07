@@ -352,8 +352,8 @@ class LunaTrainingApp:
         )
         log.info(
             (
-                "E{} {:8} {loss/pos:.4f} loss, "
-                + "{correct/pos:-5.1f}% correct ({pos_correct:} of {pos_count})"
+                "E{} {:8} {loss/pos:.4f} loss, " + 
+                "{correct/pos:-5.1f}% correct ({pos_correct:} of {pos_count})"
             ).format(
                 epoch_ndx,
                 mode_str,
