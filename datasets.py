@@ -51,7 +51,7 @@ def getCandidateInfoList(data_loc="data", requireOnDisk_bool=True):
     presentOnDisk_set = {os.path.split(p)[-1][:-4] for p in mhd_list}
 
     diameter_dict = {}
-    with open(os.path.join(data_loc, "/annotations.csv"), "r") as f:
+    with open(os.path.join(data_loc, "annotations.csv"), "r") as f:
         for row in list(csv.reader(f))[1:]:
             series_uid = row[0]
             annotationCenter_xyz = tuple([float(x) for x in row[1:4]])
@@ -67,7 +67,7 @@ def getCandidateInfoList(data_loc="data", requireOnDisk_bool=True):
 
     candidateInfo_list = []
 
-    with open(os.path.join(data_loc, "data/candidates.csv"), "r") as f:
+    with open(os.path.join(data_loc, "candidates.csv"), "r") as f:
         reader = list(csv.reader(f))
         # print(reader[0])
         for row in reader[1:]:
