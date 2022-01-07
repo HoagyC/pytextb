@@ -108,6 +108,7 @@ def getCandidateInfoList(data_loc="data", requireOnDisk_bool=True):
 
 class Ct:
     def __init__(self, series_uid, data_loc="data"):
+        print(data_loc, series_uid)
         mhd_path = glob(f"{data_loc}/subset*/{series_uid}.mhd")[0]
 
         ct_mhd = sitk.ReadImage(mhd_path)
