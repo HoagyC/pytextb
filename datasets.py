@@ -198,6 +198,7 @@ class LunaDataset(Dataset):
     def __init__(
         self, val_stride=0, isValSet_bool=None, series_uid=None, sortby_str="random", data_loc="data"
     ):
+        self.data_loc = data_loc
         super().__init__()
         self.candidateInfo_list = copy.copy(getCandidateInfoList(data_loc=data_loc))
 
@@ -236,6 +237,7 @@ class LunaDataset(Dataset):
             candidateInfo_tup.series_uid,
             candidateInfo_tup.center_xyz,
             width_irc,
+            data_loc=self.data_loc
         )
 
         candidate_t = torch.from_numpy(candidate_a)
