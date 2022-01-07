@@ -23,7 +23,7 @@ def enumerateWithEstimate(
         if current_ndx == start_ndx:
             start_time = time.time()
 
-        elif (current_ndx in pow_list and current_ndx > start_ndx) or current_ndx == iter_len-  1:
+        elif current_ndx > start_ndx or (current_ndx in pow_list and current_ndx == iter_len - 1):
             current_time = time.time()
             elapsed_time = current_time - start_time
             time_per_iter = elapsed_time / (current_ndx - start_ndx)

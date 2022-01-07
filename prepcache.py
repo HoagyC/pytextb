@@ -58,7 +58,6 @@ class LunaPrepCacheApp:
         batch_iter = enumerateWithEstimate(
             self.prep_dl,
             "Stuffing cache",
-            start_ndx=self.prep_dl.num_workers,
         )
         for _ in batch_iter:
             pass

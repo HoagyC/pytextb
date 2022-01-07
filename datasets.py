@@ -223,8 +223,7 @@ class LunaDataset(Dataset):
 
 
     def __len__(self):
-        # return len(self.candidateInfo_list)
-        return 500
+        return len(self.candidateInfo_list)
 
     def __getitem__(self, ndx):
         candidateInfo_tup = self.candidateInfo_list[ndx]
