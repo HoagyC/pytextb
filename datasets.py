@@ -194,15 +194,20 @@ def listdir(cache_loc):
 # It's therefore worth caching each result on disk so we can run subsequent epochs quickly.
 
 def getCtRawCandidate(series_uid, center_xyz, width_irc, cache_loc, data_loc="data"):
-    fname = str(series_uid) + '.'.join([str(x) for x in center_xyz])
-    full_fname = os.path.join(cache_loc, fname)
-    if fname in listdir(cache_loc):
-        ct_chunk, center_irc = pickle.load(open(full_fname, 'rb'))
+    ctName = str(series_uid) 
+    locName = '.'.join([str(x) for x in center_xyz])
+    fullName = os.path.join(cache_loc, ctName, locName)
+    if ctName not in listdir(cache_loc):
+        os.mkdir(os.path.join(cache_loc, ctName))
+
+    if fullName in listdir(os.path.join(cache_loc, ctName)):
+        t_chunk, center_irc = pickle.load(open(fullName, 'rb'))
     else:
         ct = getCt(series_uid, data_loc=data_loc)
         ct_chunk, center_irc = ct.getRawCandidate(center_xyz, width_irc)
-        with open(full_fname, "wb") as f:
+        with open(fullName, "wb") as f:
             pickle.dump((ct_chunk, center_irc), f)
+
     return ct_chunk, center_irc
 
 
