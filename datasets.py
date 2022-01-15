@@ -1,5 +1,7 @@
 import functools
+import math
 import os
+import pickle
 import csv
 import copy
 import random
@@ -9,6 +11,7 @@ from glob import glob
 from math import sqrt
 
 import torch
+import torch.nn.functional as F
 import numpy as np
 import SimpleITK as sitk
 
@@ -182,22 +185,133 @@ def getCt(series_uid, data_loc="data"):
     return Ct(series_uid, data_loc=data_loc)
 
 
-raw_cache = getCache("raw")  # Sets the prefix string for the on-disk caching
+@functools.lru_cache(1)
+def listdir(cache_loc):
+    return os.listdir(cache_loc)
+    
 
 # These raw candidates need to be used repeatedly to train the model
 # It's therefore worth caching each result on disk so we can run subsequent epochs quickly.
-@raw_cache.memoize(typed=True)
-def getCtRawCandidate(series_uid, center_xyz, width_irc, data_loc="data"):
-    ct = getCt(series_uid, data_loc=data_loc)
-    ct_chunk, center_irc = ct.getRawCandidate(center_xyz, width_irc)
+
+def getCtRawCandidate(series_uid, center_xyz, width_irc, cache_loc, data_loc="data"):
+    fname = str(series_uid) + '.'.join([str(x) for x in center_xyz])
+    full_fname = os.path.join(cache_loc, fname)
+    if fname in listdir(cache_loc):
+        ct_chunk, center_irc = pickle.load(open(full_fname, 'rb'))
+    else:
+        ct = getCt(series_uid, data_loc=data_loc)
+        ct_chunk, center_irc = ct.getRawCandidate(center_xyz, width_irc)
+        with open(full_fname, "wb") as f:
+            pickle.dump((ct_chunk, center_irc), f)
     return ct_chunk, center_irc
+
+
+def getCtAugmentedCandidate(
+    series_uid,
+    center_xyz,
+    width_irc,
+    augmentation_dict,
+    cache_loc,
+    use_cache=True,
+    data_loc="data",
+):
+    if use_cache:
+        ct_chunk, center_irc = getCtRawCandidate(
+            series_uid, center_xyz, width_irc, cache_loc, data_loc,
+        )
+    else:
+        ct = getCt(series_uid, data_loc)
+        ct_chunk, center_irc = ct.getRawCandidate(center_xyz, width_irc)
+
+    ct_t = torch.tensor(ct_chunk).unsqueeze(0).unsqueeze(0).to(torch.float32)
+    # two unsqueezes here because we have a batch of one and only want one channel
+
+    transform_t = torch.eye(
+        4
+    )  # Three spatial dimensions plus one extra for homogeneous coords
+
+    for i in range(3):
+        if "flip" in augmentation_dict:
+            if random.random() > 0.5:
+                transform_t[
+                    i, i
+                ] *= -1  # as the i'th coord rises, go up in the negative
+
+        if "offset" in augmentation_dict:
+            offset_float = augmentation_dict["offset"]
+            random_float = (random.random() * 2) - 1
+            transform_t[i, 3] = offset_float * random_float
+            # this is shifting function of the last column of the affine grid
+            # scale factor of it is offset_float
+
+        if "scale" in augmentation_dict:
+            scale_float = augmentation_dict["scale"]
+            random_float = (random.random() * 2) - 1
+            transform_t[i, i] *= 1.0 + scale_float * random_float
+
+        if "rotate" in augmentation_dict:
+            angle_rad = random.random() * math.pi * 2
+            s = math.sin(angle_rad)
+            c = math.cos(angle_rad)
+
+            # note that we're confining the rotation to the x-y plane
+            # because the different width of the voxel in the depth direction
+            # so we cant just rotate in.
+            # resampling would make the data blurry (though more than rotating
+            # which also requires interpolation?) so only rotate in these directions for now
+
+            rotation_t = torch.tensor(
+                [
+                    [c, -s, 0, 0],
+                    [s, c, 0, 0],
+                    [0, 0, 1, 0],
+                    [0, 0, 0, 1],
+                ]
+            )
+
+            transform_t @= rotation_t
+
+    affine_t = F.affine_grid(
+        transform_t[:3].unsqueeze(0).to(torch.float32),
+        # [:3] because you can't use the last row in an affine matrix
+        ct_t.size(),
+        align_corners=False,  # if true, treats the corners as the centers of the corner pixels,
+        # (rather than the far corners of the corner pixels?)
+    )
+
+    # affine grid generates a flow field from a (batch of) affine matrices
+    # grid sam[]
+    augmented_chunk = F.grid_sample(
+        ct_t,
+        affine_t,
+        padding_mode="border",
+        align_corners=False,
+    ).to("cpu")
+
+    if "noise" in augmentation_dict:
+        noise_t = torch.randn_like(augmented_chunk)
+        noise_float = augmentation_dict["noise"]
+
+        augmented_chunk += noise_float * noise_t
+
+    return augmented_chunk[0], center_irc
 
 
 class LunaDataset(Dataset):
     def __init__(
-        self, val_stride=0, isValSet_bool=None, series_uid=None, sortby_str="random", data_loc="data"
+        self,
+        val_stride=0,
+        isValSet_bool=None,
+        series_uid=None,
+        sortby_str="random",
+        data_loc="data",
+        balance_cats=True,
+        ratio_int=0,
+        cache_loc="./diskcache"
     ):
         self.data_loc = data_loc
+        self.cache_loc = cache_loc
+        
         super().__init__()
         self.candidateInfo_list = copy.copy(getCandidateInfoList(data_loc=data_loc))
 
@@ -225,18 +339,37 @@ class LunaDataset(Dataset):
         else:
             raise Exception("Unknown sort: " + repr(sortby_str))
 
+        self.ratio_int = ratio_int
+        self.negative_list = [
+            nt for nt in self.candidateInfo_list if not nt.isNodule_bool
+        ]
+        self.positive_list = [nt for nt in self.candidateInfo_list if nt.isNodule_bool]
+
     def __len__(self):
+
         return len(self.candidateInfo_list)
 
     def __getitem__(self, ndx):
-        candidateInfo_tup = self.candidateInfo_list[ndx]
+        if self.ratio_int:
+            if ndx % (self.ratio_int + 1) == 0:
+                # if you do the naive way then you only get certain
+                pos_ndx = (ndx // self.ratio_int + 1) % len(self.positive_list)
+                candidateInfo_tup = self.candidateInfo_list[pos_ndx]
+            else:
+                neg_ndx = (ndx // self.ratio_int + 1) % len(self.negative_list)
+                candidateInfo_tup = self.candidateInfo_list[neg_ndx]
+
+        else:
+            candidateInfo_tup = self.candidateInfo_list[ndx % len(self.candidateInfo_list)]
+        
         width_irc = (32, 48, 48)
 
         candidate_a, center_irc = getCtRawCandidate(
             candidateInfo_tup.series_uid,
             candidateInfo_tup.center_xyz,
             width_irc,
-            data_loc=self.data_loc
+            cache_loc=self.cache_loc,
+            data_loc=self.data_loc,
         )
 
         candidate_t = torch.from_numpy(candidate_a)
@@ -258,3 +391,8 @@ class LunaDataset(Dataset):
                 center_irc
             ),  # cander of the candidate within the overall CT scan
         )
+
+    def shuffleSamples(self):
+        if self.ratio_int:
+            random.shuffle(self.negative_list)
+            random.shuffle(self.positive_list)

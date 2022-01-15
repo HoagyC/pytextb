@@ -12,3 +12,5 @@ chap_books/
 .vscode
 runs/
 logger.log
+saved_models/
+sizes.txt

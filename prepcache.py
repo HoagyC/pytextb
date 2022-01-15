@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import sys
 
 import numpy as np
@@ -45,7 +46,13 @@ class LunaPrepCacheApp:
         parser.add_argument(
             "--data-loc",
             help="Location of the Ct scan data",
-            default="data",
+            default="/media/hoagy/3666-6361",
+            type=str,
+        )
+        parser.add_argument(
+            "--cache-loc",
+            help="Location of cached data",
+            default="/media/hoagy/3666-6361/diskcache",
             type=str,
         )
 
@@ -59,7 +66,8 @@ class LunaPrepCacheApp:
         self.prep_dl = DataLoader(
             LunaDataset(
                 sortby_str="series_uid",
-                data_loc=self.cli_args.data_loc
+                data_loc=self.cli_args.data_loc,
+                cache_loc=self.cli_args.cache_loc,
             ),
             batch_size=self.cli_args.batch_size,
             num_workers=self.cli_args.num_workers,
@@ -69,9 +77,13 @@ class LunaPrepCacheApp:
             self.prep_dl,
             "Stuffing cache",
         )
-        for _ in batch_iter:
-            pass
-
+        for n, _ in enumerate(batch_iter):
+            if n % 10 == 0:
+                keys, vals = [x.split() for x in os.popen('free -t').readlines()[:2]]
+                vals = vals[1:]  # remove 'Mem:'
+                mem_dict = dict(zip(keys, vals))
+                percent_usage = 100 * int(mem_dict['used']) / int(mem_dict['total'])
+                log.info(f"Done {n}, {percent_usage}% memory usage")
 
 if __name__ == "__main__":
     LunaPrepCacheApp().main()

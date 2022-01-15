@@ -1,5 +1,7 @@
 import gzip  # core lib for zipping and unzipping
 
+import os
+
 from cassandra.cqltypes import BytesType
 
 from diskcache import FanoutCache, Disk, core
@@ -81,11 +83,11 @@ class GzipDisk(Disk):
         return value
 
 
-def getCache(scope_str):
+def getCache(cache_loc, scope_str):
     return FanoutCache(
-        "data-unversioned/cache/" + scope_str,
+        os.path.join(cache_loc, scope_str),
         disk=GzipDisk,
-        shards=64,
+        shards=4,
         timeout=1,
         size_limit=3e11,
         # disk_min_file_size=2**20,

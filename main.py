@@ -4,13 +4,14 @@ import math
 import operator
 import os
 import sys
+import time
 
 from functools import reduce
 
 import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.utils.tensorboard import SummaryWriter
 
 from datasets import LunaDataset
@@ -135,7 +136,16 @@ class LunaTrainingApp:
             type=int,
         )
         parser.add_argument(
+            "--balanced",
+            help="Whether to have equal numbers of negative and positive samples",
+            default=False,
+            type=bool,
+        )
+        parser.add_argument(
             "--data-loc", help="Location of the raw CT scans", default="data"
+        )
+        parser.add_argument(
+            "--cache-loc", help="Location of the cached CT chunks", default="/media/hoagy/3666-6361/diskcache"
         )
         parser.add_argument(
             "--batch-size",
@@ -153,10 +163,15 @@ class LunaTrainingApp:
             "--tb-prefix", default="p2ch11", help="Data prefix for Tensorboard"
         )
         parser.add_argument(
-            "comment",
+            "--comment",
             help="Comment suffix for Tensorboard run",
             nargs="?",
             default="dlwpt",
+        )
+        parser.add_argument(
+            "--epoch-size",
+            help="size of each epoch",
+            
         )
 
         self.cli_args = parser.parse_args(sys_argv)
@@ -193,24 +208,52 @@ class LunaTrainingApp:
             self.val_writer = SummaryWriter(
                 log_dir=log_dir + "-val_cls-" + self.cli_args.comment
             )
+            
+    def saveModel(self, model=None, save_loc='saved_models', epochs=0):
+        if not model:
+            model = self.model
+        
+        time_format = '%Y-%M-%d-%H:%m:%S'
+        time_str = time.strftime(time_format, time.gmtime(time.time()))
+        file_name = f'model-{epochs}epochs-{time_str}.pt'
+        with open(os.path.join(save_loc, file_name), 'wb') as f:
+            torch.save(model, f)
 
     def initTrainDl(self):
         train_ds = LunaDataset(
             val_stride=10,
             isValSet_bool=False,
-            data_loc=self.cli_args.data_loc
-            )
+            data_loc=self.cli_args.data_loc,
+            ratio_int=int(self.cli_args.balanced),
+            cache_loc=self.cli_args.cache_loc,
+        )
 
         batch_size = self.cli_args.batch_size
         if self.use_cuda:
             batch_size *= torch.cuda.device_count()
+            
+        if not self.cli_args.balanced:
+            isNod_mask = [x.isNodule_bool for x in train_ds.candidateInfo_list]
+            isNodFraction_float = sum(isNod_mask) / len(isNod_mask)
+            weights = [1 if x else isNodFraction_float for x in isNod_mask]
+            sampler = WeightedRandomSampler(weights=weights, num_samples=self.cli_args.batch_size)
 
-        train_dl = DataLoader(
-            train_ds,
-            batch_size=batch_size,
-            num_workers=self.cli_args.num_workers,
-            pin_memory=self.use_cuda,  # This is a bool, pinned memory transfers fast to GPU
-        )
+            train_dl = DataLoader(
+                train_ds,
+                batch_size=batch_size,
+                num_workers=self.cli_args.num_workers,
+                pin_memory=self.use_cuda,  # This is a bool, pinned memory transfers fast to GPU
+                sampler=sampler,
+            )
+
+        else: 
+            train_dl = DataLoader(
+                train_ds,
+                batch_size=batch_size,
+                num_workers=self.cli_args.num_workers,
+                pin_memory=self.use_cuda,  # This is a bool, pinned memory transfers fast to GPU
+                sampler=sampler,
+            )
 
         return train_dl
 
@@ -218,7 +261,8 @@ class LunaTrainingApp:
         val_ds = LunaDataset(
             val_stride=10,
             isValSet_bool=True,
-            data_loc=self.cli_args.data_loc
+            data_loc=self.cli_args.data_loc,
+            cache_loc=self.cli_args.cache_loc
         )
 
         batch_size = self.cli_args.batch_size
@@ -325,33 +369,35 @@ class LunaTrainingApp:
 
         neg_correct = int((negLabel_mask & negPred_mask).sum())
         pos_correct = int((posLabel_mask & posPred_mask).sum())
+        
+        precision = pos_correct / posPred_mask.sum()
+        recall = pos_correct / posLabel_mask.sum()
+        f1score = 2 * ((precision + recall) / (precision * recall))
 
         metrics_dict = {}
         metrics_dict["loss/all"] = metrics_t[METRICS_LOSS_NDX].mean()
         metrics_dict["loss/neg"] = metrics_t[METRICS_LOSS_NDX, negLabel_mask].mean()
         metrics_dict["loss/pos"] = metrics_t[METRICS_LOSS_NDX, posLabel_mask].mean()
 
-        metrics_dict["correct/all"] = (
-            (pos_correct + neg_correct) / float(metrics_t.shape[1]) * 100
-        )
+        metrics_dict["correct/all"] = ((pos_correct + neg_correct) / float(metrics_t.shape[1]) * 100)
         metrics_dict["correct/neg"] = (neg_correct / max(1e-5, float(neg_count))) * 100
         metrics_dict["correct/pos"] = (pos_correct / max(1e-5, float(pos_count))) * 100
+        
+        metrics_dict["pr/precision"] = precision
+        metrics_dict["pr/recall"] = recall
+        metrics_dict["pr/f1score"] = f1score
 
         log.info(
             (
-                "E{} {:8} {loss/all:4f} loss"  # strings are added (concat) for neatness
-                + "{correct/all:-5.1f}% correct, "  # number after the dot is decimal places, before is space given
-            ).format(epoch_ndx, mode_str, **metrics_dict)
-        )
-        log.info(
-            (
-                "E{} {:8} {loss/neg:.4f} loss, "
-                + "{correct/neg:-5.1f}% correct ({neg_correct:} of {neg_count:})"
+                "E{} {:8} {loss/all:.4f} loss, "
+                + "{correct/all:-5.1f}% correct, "
+                + "{pr/precision:.4f} precision, "
+                + "{pr/recall:.4f} recall, "
+                + "{pr/f1score:.4f} f1 score" 
             ).format(
                 epoch_ndx,
                 mode_str,
-                neg_correct=neg_correct,
-                neg_count=neg_count,
+
                 **metrics_dict,
             )
         )
@@ -364,6 +410,18 @@ class LunaTrainingApp:
                 mode_str,
                 pos_correct=pos_correct,
                 pos_count=pos_count,
+                **metrics_dict,
+            )
+        )
+        log.info(
+            (
+                "E{} {:8} {loss/neg:.4f} loss, " + 
+                "{correct/neg:-5.1f}% correct ({neg_correct:} of {neg_count})"
+            ).format(
+                epoch_ndx,
+                mode_str,
+                neg_correct=neg_correct,
+                neg_count=neg_count,
                 **metrics_dict,
             )
         )
@@ -385,6 +443,7 @@ class LunaTrainingApp:
 
             valMetrics_t = self.doValidation(val_dl)
             self.logMetrics(epoch_ndx, "val", valMetrics_t)
+            self.saveModel(epoch_ndx)
 
 
 if __name__ == "__main__":
