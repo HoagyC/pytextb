@@ -200,7 +200,7 @@ def getCtRawCandidate(series_uid, center_xyz, width_irc, cache_loc, data_loc="da
     if ctName not in listdir(cache_loc):
         os.mkdir(os.path.join(cache_loc, ctName))
 
-    if fullName in listdir(os.path.join(cache_loc, ctName)):
+    if locName in listdir(os.path.join(cache_loc, ctName)):
         t_chunk, center_irc = pickle.load(open(fullName, 'rb'))
     else:
         ct = getCt(series_uid, data_loc=data_loc)
