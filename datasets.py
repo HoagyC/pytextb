@@ -201,7 +201,7 @@ def getCtRawCandidate(series_uid, center_xyz, width_irc, cache_loc, data_loc="da
         os.mkdir(os.path.join(cache_loc, ctName))
 
     if locName in listdir(os.path.join(cache_loc, ctName)):
-        t_chunk, center_irc = pickle.load(open(fullName, 'rb'))
+        ct_chunk, center_irc = pickle.load(open(fullName, 'rb'))
     else:
         ct = getCt(series_uid, data_loc=data_loc)
         ct_chunk, center_irc = ct.getRawCandidate(center_xyz, width_irc)
@@ -209,7 +209,7 @@ def getCtRawCandidate(series_uid, center_xyz, width_irc, cache_loc, data_loc="da
             pickle.dump((ct_chunk, center_irc), f)
 
     return ct_chunk, center_irc
-
+    
 
 def getCtAugmentedCandidate(
     series_uid,
